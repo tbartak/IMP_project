@@ -20,6 +20,8 @@ const int resolution = 8;
 const int ledChannel1 = 0;
 const int ledChannel2 = 1;
 
+int previousDutyCycle = 0;
+
 // TODO: linearizace úrovně svitu
 float linearization(float lux) {
   return lux;
@@ -27,6 +29,8 @@ float linearization(float lux) {
 
 /**
  * Calculate brightness percentage based on light level
+ * 
+ * @param lux - Light level in lux
  */
 float brightnessCalculation(float lux) {
   float percentage;
@@ -40,10 +44,40 @@ float brightnessCalculation(float lux) {
   return percentage;
 }
 
-// TODO: funkce an plynulý přechod mezi úrovněmi svitu
+/**
+ * Fade smoothly between two brightness levels
+ * 
+ * @param from - Starting brightness level
+ * @param to - Target brightness level
+ */
+void brightnessFade(int from, int to) {
+  int steps = abs(from - to); // steps between current and target duty cycle
+  int duration = 255; // duration of the fade in ms
+
+  if (steps == 0) {
+    delay(duration); // wait 255ms between measurements
+    return;
+  }
+
+  int delayTime = duration / steps; // difference between each step in ms
+
+  if (from < to) {
+    for (int i = from; i <= to; i++) {
+      ledcWrite(ledChannel1, i);
+      ledcWrite(ledChannel2, i);
+      delay(delayTime); // for smooth transitions based on the number of steps
+    }
+  } else {
+    for (int i = from; i >= to; i--) {
+      ledcWrite(ledChannel1, i);
+      ledcWrite(ledChannel2, i);
+      delay(delayTime); // for smooth transitions based on the number of steps
+    }
+  }
+}
 
 /**
- * Setup function runs once when the microcontroller is powered on
+ * Setup function runs once when the micro-controller is powered on
  */
 void setup() {
   Serial.begin(9600); // initialize serial communication at 9600 bits per second
@@ -73,12 +107,14 @@ void loop() {
     Serial.println("%");
 
     // calculate duty cycle for PWM (0-255 int values)
-    int dutyCycle = brightness * 2.55; 
-    dutyCycle = constrain(dutyCycle, 0, 255);
+    int currentDutyCycle = brightness * 2.55; 
+    currentDutyCycle = constrain(currentDutyCycle, 0, 255);
 
-    // set the brightness of the LED (under the MIN_LUX the LED is off, over the MAX_LUX the LED is on full brightness)
-    ledcWrite(ledChannel1, dutyCycle);
-    ledcWrite(ledChannel2, dutyCycle);
+    // fade between previous and current duty cycle
+    brightnessFade(previousDutyCycle, currentDutyCycle);
 
-    delay(1000); // wait a second between measurements
+    // save current duty cycle for next iteration
+    previousDutyCycle = currentDutyCycle;
+
+    // delay(255); // wait 255ms between measurements // prozatím nahrazeno delayem v brightnessFade
 }
