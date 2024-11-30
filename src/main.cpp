@@ -153,6 +153,13 @@ void brightnessFade(int from, int to) {
   }
 }
 
+void signalingLED(int times) {
+  for (int i = 0; i < times; i++) {
+    brightnessFade(0, 255);
+    brightnessFade(255, 0);
+  }
+}
+
 // utility function for checking if it is connected to a device before publishing a message
 void checkConnectionAndPublish(const char* topic, const char* message) {
   if (client.connected()) {
@@ -160,7 +167,13 @@ void checkConnectionAndPublish(const char* topic, const char* message) {
   }
 }
 
-// TODO: will blink once it successfully connects to WiFi
+/**
+ * Function for setting up Wi-Fi connection.
+ * Will blink the LEDs 3 times to signal successful connection to Wi-Fi.
+ * 
+ * @param ssid - Wi-Fi SSID
+ * @param password - Wi-Fi password
+ */
 void setup_wifi(const char* ssid, const char* password) {
   delay(10);
   Serial.println();
@@ -179,10 +192,15 @@ void setup_wifi(const char* ssid, const char* password) {
   Serial.println("WiFi connected");
   Serial.println("IP address: ");
   Serial.println(WiFi.localIP());
+
+  signalingLED(3); // blink 3 times to signal successful connection to WiFi
 }
 
-// TODO: will blink once it successfully connects to MQTT
-void reconnect_mqtt() {
+/**
+ * Function for connecting to MQTT broker.
+ * Will blink the LEDs 3 times to signal successful connection to MQTT.
+ */
+void connect_mqtt() {
   // loop until connected to MQTT
   while (!client.connected()) {
     Serial.print("Trying to connect to MQTT...");
@@ -191,6 +209,8 @@ void reconnect_mqtt() {
       Serial.println("connected");
       // subscribe to the topic for threshold updates
       client.subscribe("light/thresholds");
+      // TODO: subscribe to other topic for changing the config of the LEDs to swap the brightness direction
+      signalingLED(3); // blink 3 times to signal successful connection to MQTT
     } else { // if connection fails, print error message with return code, to understand what went wrong and try again in 5 seconds
       Serial.print("failed, rc=");
       Serial.print(client.state());
@@ -286,6 +306,12 @@ void setup() {
 
   loadLightThresholds(); // load light thresholds from NVS
 
+  // initialize LED PWM
+  ledcSetup(ledChannel1, freq, resolution);
+  ledcSetup(ledChannel2, freq, resolution);
+  ledcAttachPin(LED_1, ledChannel1);
+  ledcAttachPin(LED_2, ledChannel2);
+
   // initialize secure client
   secureClient.setInsecure(); // set insecure connection (workaround for HiveMQ Cloud TLS connection)
 
@@ -295,18 +321,12 @@ void setup() {
   // connect to MQTT broker
   client.setServer(mqtt_server, mqtt_port); // set MQTT broker address and port
   client.setCallback(mqtt_callback); // set callback function for incoming messages
-
-  // initialize LED PWM
-  ledcSetup(ledChannel1, freq, resolution);
-  ledcSetup(ledChannel2, freq, resolution);
-  ledcAttachPin(LED_1, ledChannel1);
-  ledcAttachPin(LED_2, ledChannel2);
 }
 
 void loop() {
-  // reconnect to MQTT broker, if connection is lost
+  // connect to MQTT broker or reconnect, if connection is lost
   if (!client.connected()) {
-    reconnect_mqtt();
+    connect_mqtt();
   }
   client.loop(); // keep the MQTT connection alive
 
@@ -340,11 +360,10 @@ void loop() {
     if (millis() - lastPublish >= 5000) {
       lastPublish = millis();
       char luxMessage[10];
-      snprintf(luxMessage, sizeof(luxMessage), "%.2f", lux);
+      snprintf(luxMessage, sizeof(luxMessage), "Current lux: %.2f lx.", lux);
       checkConnectionAndPublish("light/lux", luxMessage);
       Serial.println("Published current light level.");
     }
 
     // delay(255); // wait 255ms between measurements // prozatím nahrazeno delayem v brightnessFade
-    // delay(100); // wait 100ms
 }
