@@ -42,6 +42,8 @@ const int ledChannel2 = 1;
 
 int previousDutyCycle = 0;
 
+bool isNightMode;
+
 Preferences preferences; // create instance of Preferences class (NVS)
 
 /**
@@ -57,7 +59,6 @@ void saveLightThresholds(float minLux, float maxLux) {
     return;
   }
   
-  preferences.begin("lightThresholds", false); 
   preferences.putFloat("minLux", minLux); // save value
   preferences.putFloat("maxLux", maxLux); // save value
   preferences.end(); // close
@@ -97,6 +98,57 @@ void updateLightThresholds(float minLux, float maxLux) {
   saveLightThresholds(MIN_LUX, MAX_LUX); // save new thresholds to NVS for future use
 }
 
+/**
+ * Function for saving configuration of the LEDs to NVS (non-volatile storage).
+ */
+void saveConfig() {
+  if (!preferences.begin("config", false)) // try to open NVS 'config' namespace in read-write mode, if something goes wrong, print error message and return
+  {
+    Serial.println("Failed to open NVS for saving configuration of the LEDs.");
+    return;
+  }
+
+  preferences.putBool("isNightMode", isNightMode); // save value
+  preferences.end(); // close
+
+  Serial.println("Configuration of the LEDs has been successfully updated and saved.");
+}
+
+/**
+ * Function for loading configuration of the LEDs from NVS (non-volatile storage).
+ */
+void loadConfig() {
+  if (!preferences.begin("config", true)) // try to open NVS 'config' namespace in read-only mode, if something goes wrong, print error message and return
+  {
+    Serial.println("Failed to open NVS for loading configuration of the LEDs. Using default values.");
+    return;
+  }
+
+  isNightMode = preferences.getBool("isNightMode", false); // get value or use default
+  preferences.end(); // close
+
+  Serial.print("Loaded configuration of the LEDs: ");
+  Serial.println(isNightMode ? "night" : "day");
+}
+
+/**
+ * Function for updating configuration of the LEDs.
+ * 
+ * @param nightMode - Night mode state
+ */
+void updateConfig(bool nightMode) {
+  isNightMode = nightMode; // internally update isNightMode
+  saveConfig(); // save new configuration to NVS for future use
+}
+
+/**
+ * Load all necessary data from NVS (non-volatile storage).
+ */
+void loadAllData() {
+  loadLightThresholds(); // load light thresholds
+  loadConfig(); // load configuration of the LEDs
+}
+
 // TODO: linearizace úrovně svitu
 float linearization(float lux) {
   return lux;
@@ -104,7 +156,6 @@ float linearization(float lux) {
 
 /**
  * Calculate brightness percentage based on light level
- * // TODO: ideálně bych chtěl přidat možnost, pro zvolení, jakým směrem se má měnit jas (zda se má zvyšovat jas, když je světlo slabé, nebo když je silné), uživatel by mohl zvolit přes MQTT, jestli chce aby s vyšší intenzitou svítily LED víc nebo naopak, bylo by uloženo v NVS
  * 
  * @param lux - Light level in lux
  */
@@ -117,6 +168,11 @@ float brightnessCalculation(float lux) {
   } else {
     percentage = (lux - MIN_LUX) / (MAX_LUX - MIN_LUX) * 100;
   }
+
+  if (isNightMode) {
+    percentage = 100 - percentage; // invert the percentage, if night mode is enabled
+  }
+
   return percentage;
 }
 
@@ -207,9 +263,9 @@ void connect_mqtt() {
     // try to connect to MQTT broker with given credentials
     if (client.connect("ESP32Client", mqtt_user, mqtt_password)) {
       Serial.println("connected");
-      // subscribe to the topic for threshold updates
+      // subscribe to the topic for threshold updates and LED configuration updates
       client.subscribe("light/thresholds");
-      // TODO: subscribe to other topic for changing the config of the LEDs to swap the brightness direction
+      client.subscribe("config/direction");
       signalingLED(3); // blink 3 times to signal successful connection to MQTT
     } else { // if connection fails, print error message with return code, to understand what went wrong and try again in 5 seconds
       Serial.print("failed, rc=");
@@ -294,6 +350,52 @@ void mqtt_callback(char* topic, byte* payload, unsigned int length) {
       checkConnectionAndPublish("light/status/error", errorMsg);
     }
   }
+  else if (strcmp(topic, "config/direction") == 0) {
+    if (strcmp(message, "day") == 0) {
+      isNightMode = false;
+      const char *successMsg = "Brightness direction has been set to day.";
+
+      updateConfig(isNightMode);
+
+      Serial.println(successMsg);
+
+      // publish success message to MQTT
+      checkConnectionAndPublish("config/status/success", successMsg);
+    } else if (strcmp(message, "night") == 0) {
+      isNightMode = true;
+
+      updateConfig(isNightMode);
+
+      const char *successMsg = "Brightness direction has been set to night.";
+      Serial.println(successMsg);
+
+      // publish success message to MQTT
+      checkConnectionAndPublish("config/status/success", successMsg);
+    } else if (strcmp(message, "swap") == 0) {
+      isNightMode = !isNightMode;
+
+      updateConfig(isNightMode);
+
+      char successMsg[50];
+      snprintf(successMsg, sizeof(successMsg), "Brightness direction has been swapped to %s.", isNightMode ? "night" : "day");
+      Serial.println(successMsg);
+
+      // publish success message to MQTT
+      checkConnectionAndPublish("config/status/success", successMsg);
+    } else
+    {
+      const char *errorMsg = "Unknown message.";
+      Serial.println(errorMsg);
+
+      // publish error message to MQTT
+      checkConnectionAndPublish("config/status/error", errorMsg);
+    }
+    
+  }
+  else
+  {
+    Serial.println("Unknown topic.");
+  }
 }
 
 /**
@@ -304,7 +406,7 @@ void setup() {
   Wire.begin(); // initialize I2C communication
   lightSensor.begin(); // initialize light sensor
 
-  loadLightThresholds(); // load light thresholds from NVS
+  loadAllData(); // load light thresholds and LED config from NVS
 
   // initialize LED PWM
   ledcSetup(ledChannel1, freq, resolution);
@@ -349,7 +451,7 @@ void loop() {
     int currentDutyCycle = brightness * 2.55; 
     currentDutyCycle = constrain(currentDutyCycle, 0, 255);
 
-    // fade between previous and current duty cycle // TODO: could think of a better option without the need to have delay in the function directly
+    // fade between previous and current duty cycle // TODO: could think of a better option without the need to have delay in the function directly, use millis() instead
     brightnessFade(previousDutyCycle, currentDutyCycle);
 
     // save current duty cycle for next iteration
@@ -359,7 +461,7 @@ void loop() {
     static unsigned long lastPublish = 0;
     if (millis() - lastPublish >= 5000) {
       lastPublish = millis();
-      char luxMessage[10];
+      char luxMessage[30];
       snprintf(luxMessage, sizeof(luxMessage), "Current lux: %.2f lx.", lux);
       checkConnectionAndPublish("light/lux", luxMessage);
       Serial.println("Published current light level.");
