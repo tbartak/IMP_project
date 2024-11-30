@@ -1,5 +1,6 @@
 .pio
 .vscode
 include/README
+include/secret.h
 lib/README
 test/README
