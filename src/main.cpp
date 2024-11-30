@@ -153,6 +153,13 @@ void brightnessFade(int from, int to) {
   }
 }
 
+// utility function for checking if it is connected to a device before publishing a message
+void checkConnectionAndPublish(const char* topic, const char* message) {
+  if (client.connected()) {
+    client.publish(topic, message);
+  }
+}
+
 // TODO: will blink once it successfully connects to WiFi
 void setup_wifi(const char* ssid, const char* password) {
   delay(10);
@@ -235,9 +242,7 @@ void mqtt_callback(char* topic, byte* payload, unsigned int length) {
           Serial.println(errorMsg);
 
           // publish error message to MQTT
-          if (client.connected()) { // TODO: could be put into a function, only would need to specify a topic and message and everything else would be handled by the function
-            client.publish("light/status/error", errorMsg);
-          }
+          checkConnectionAndPublish("light/status/error", errorMsg);
           return;
         }
         
@@ -249,9 +254,7 @@ void mqtt_callback(char* topic, byte* payload, unsigned int length) {
         Serial.println(successMsg);
 
         // publish success message to MQTT
-        if (client.connected()) {
-          client.publish("light/status/success", successMsg);
-        }
+        checkConnectionAndPublish("light/status/success", successMsg);
       }
       else
       {
@@ -259,9 +262,7 @@ void mqtt_callback(char* topic, byte* payload, unsigned int length) {
         Serial.println(errorMsg);
 
         // publish error message to MQTT
-        if (client.connected()) {
-          client.publish("light/status/error", errorMsg);
-        }
+        checkConnectionAndPublish("light/status/error", errorMsg);
       }
     }
     else
@@ -270,9 +271,7 @@ void mqtt_callback(char* topic, byte* payload, unsigned int length) {
       Serial.println(errorMsg);
 
       // publish error message to MQTT
-      if (client.connected()) {
-        client.publish("light/status/error", errorMsg);
-      }
+      checkConnectionAndPublish("light/status/error", errorMsg);
     }
   }
 }
@@ -342,7 +341,7 @@ void loop() {
       lastPublish = millis();
       char luxMessage[10];
       snprintf(luxMessage, sizeof(luxMessage), "%.2f", lux);
-      client.publish("light/lux", luxMessage);
+      checkConnectionAndPublish("light/lux", luxMessage);
       Serial.println("Published current light level.");
     }
 
