@@ -149,9 +149,18 @@ void loadAllData() {
   loadConfig(); // load configuration of the LEDs
 }
 
-// TODO: linearizace úrovně svitu
-float linearization(float lux) {
-  return lux;
+/**
+ * Linearize the brightness of the LEDs using gamma correction.
+ * Our eyes perceive light intensity in a non-linear way, so we need to correct the brightness to make it linear. 
+ * source: https://learn.adafruit.com/led-tricks-gamma-correction/the-issue
+ * source: https://electricfiredesign.com/2022/11/14/gamma-correction-for-led-lighting/
+ * 
+ * @param percentage - Brightness percentage
+ */
+float gammaLinearization(float percentage) {
+  const float gamma = 2.2;
+  float correctedBrightness = pow(percentage / 100.0, gamma) * 100.0;
+  return correctedBrightness;
 }
 
 /**
@@ -162,16 +171,18 @@ float linearization(float lux) {
 float brightnessCalculation(float lux) {
   float percentage;
   if (lux < MIN_LUX) {
-    percentage = 0;
+    percentage = 0.0;
   } else if (lux > MAX_LUX) {
-    percentage = 100;
+    percentage = 100.0;
   } else {
-    percentage = (lux - MIN_LUX) / (MAX_LUX - MIN_LUX) * 100;
+    percentage = (lux - MIN_LUX) / (MAX_LUX - MIN_LUX) * 100.0;
   }
 
   if (isNightMode) {
-    percentage = 100 - percentage; // invert the percentage, if night mode is enabled
+    percentage = 100.0 - percentage; // invert the percentage, if night mode is enabled
   }
+
+  percentage = gammaLinearization(percentage); // 
 
   return percentage;
 }
@@ -437,18 +448,15 @@ void loop() {
     Serial.print("Light: ");
     Serial.print(lux);
     Serial.println(" lx");
-    
-    // TODO: linearizace úrovně svitu
-    float linearizedLux = linearization(lux);
 
     // calculate brightness percentage
-    float brightness = brightnessCalculation(linearizedLux);
+    float brightness = brightnessCalculation(lux);
     Serial.print("Brightness: ");
     Serial.print(brightness);
     Serial.println("%");
 
     // calculate duty cycle for PWM (0-255 int values)
-    int currentDutyCycle = brightness * 2.55; 
+    int currentDutyCycle = brightness * 2.55; // the brightness is already linearized using gamma correction
     currentDutyCycle = constrain(currentDutyCycle, 0, 255);
 
     // fade between previous and current duty cycle // TODO: could think of a better option without the need to have delay in the function directly, use millis() instead
