@@ -17,6 +17,6 @@ extern const char* ssid; // WiFi SSID
 extern const char* password; // WiFi password
 
 // Function declarations
-void setup_wifi(const char* ssid, const char* password);
+void setupWifi(const char* ssid, const char* password);
 
 #endif // WIFI_UTILITIES_H

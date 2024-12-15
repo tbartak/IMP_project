@@ -11,8 +11,8 @@
 #include <math.h>
 #include "globals.h"
 
-const int LED_1 = 4; // LED connected to GPIO 4
-const int LED_2 = 2; // LED connected to GPIO 2
+const int LED_1 = 25; // LED connected to GPIO 25
+const int LED_2 = 26; // LED connected to GPIO 26
 const int freq = 5000;
 const int resolution = 8;
 const int ledChannel1 = 0;

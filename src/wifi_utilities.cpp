@@ -16,7 +16,7 @@ const char* password = WIFI_PASSWORD; // WiFi password
  * @param ssid - Wi-Fi SSID
  * @param password - Wi-Fi password
  */
-void setup_wifi(const char* ssid, const char* password) {
+void setupWifi(const char* ssid, const char* password) {
   delay(10);
   Serial.println();
   Serial.print("Connecting to ");

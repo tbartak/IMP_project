@@ -10,7 +10,7 @@
  * Setup function runs once when the micro-controller is powered on
  */
 void setup() {
-  Serial.begin(9600); // initialize serial communication at 9600 bits per second
+  Serial.begin(9600); // initialize serial communication at 9600 bits per second (baud rate)
   Wire.begin(); // initialize I2C communication
   lightSensor.begin(); // initialize light sensor
 
@@ -23,7 +23,7 @@ void setup() {
   secureClient.setInsecure(); // set insecure connection (workaround for HiveMQ Cloud TLS connection)
 
   // initialize and connect to WiFi
-  setup_wifi(ssid, password);
+  setupWifi(ssid, password);
   
   // connect to MQTT broker
   client.setServer(mqtt_server, mqtt_port); // set MQTT broker address and port
@@ -56,7 +56,7 @@ void loop() {
     int currentDutyCycle = brightness * 2.55; // the brightness is already linearized using gamma correction
     currentDutyCycle = constrain(currentDutyCycle, 0, 255);
 
-    // fade between previous and current duty cycle // TODO: could think of a better option without the need to have delay in the function directly, use millis() instead
+    // fade between previous and current duty cycle
     brightnessFade(previousDutyCycle, currentDutyCycle);
 
     // save current duty cycle for next iteration
@@ -71,6 +71,4 @@ void loop() {
       checkConnectionAndPublish("light/lux", luxMessage);
       Serial.println("Published current light level.");
     }
-
-    // delay(255); // wait 255ms between measurements // prozatím nahrazeno delayem v brightnessFade
 }
